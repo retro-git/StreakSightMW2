@@ -11,6 +11,7 @@ vfunc_hook d3d_hook;
 stats_t* stats;
 cg_t* cg;
 refdef_t* refdef;
+int* CGNum;
 
 namespace index
 {
@@ -27,6 +28,17 @@ long __stdcall hkEndScene(IDirect3DDevice9* device)
     static int killsStart = stats->kills;
     static int deathsStart = stats->deaths;
 
+    auto localInKillcam = []()
+    {
+        return !(*CGNum == cg->clientNum);
+    };
+
+    auto resetStats = []()
+    {
+        killsStart = stats->kills;
+        deathsStart = stats->deaths;
+    };
+
     if (initResources && device)
     {
         renderer = std::make_shared<Renderer>(device, 1536);
@@ -36,14 +48,14 @@ long __stdcall hkEndScene(IDirect3DDevice9* device)
     }
 
     if (!cg->isIngame) {
-        killsStart = stats->kills;
+        resetStats();
         return oEndScene(device);
     }
-    else if (stats->deaths != deathsStart)
-    {
-        killsStart = stats->kills;
-        deathsStart = stats->deaths;
-    }
+
+    if (stats->deaths != deathsStart
+        || localInKillcam()
+        || GetAsyncKeyState(VK_HOME)
+        ) resetStats();
 
     renderer->begin();
     renderer->draw_text(font, { (float)(0.95 * refdef->width), (float)(0.015 * refdef->height) },
@@ -75,6 +87,7 @@ DWORD WINAPI OnDllAttach(HMODULE hModule) {
 
     auto mod = GetModuleHandle(NULL);
     cg = *(cg_t**)(Utils::PatternScan(mod, "8B C7 B9 ? ? ? ?") + 3);
+    CGNum = *(int**)(Utils::PatternScan(mod, "8B 0D ? ? ? ? 8B C1 69") + 2);
     refdef = *(refdef_t**)(Utils::PatternScan(mod, "8D 4C 24 08 B8 ? ? ? ?") + 5);
     stats = (stats_t*)(0x1B8B768 + 0x80);
 
